@@ -104,8 +104,8 @@ class VoicePhoneSession:
         # Correct LiveKit 1.8.5 start syntax with explicit room and agent
         logger.info("Starting AgentSession with LiveKit 1.8.5 Agent...")
         await self._session.start(
-            room=self.ctx.room,
             agent=agent,
+            room=self.ctx.room,
         )
 
         # Initial greeting
