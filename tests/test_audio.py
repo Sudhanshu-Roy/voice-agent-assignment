@@ -1,24 +1,30 @@
 """
-Comprehensive unit tests for audio quality gating, RMS calculation,
-noise suppression initialization, and STT event filtering.
+Unit tests for the real-time audio pipeline:
+- Native LiveKit APM FrameProcessor noise cancellation
+- RMS energy calculation and utterance speech tracking
+- Conservative quality gating (RMS and STT confidence)
+- Protection against interim streaming transcripts mutating state
 """
 
 import array
 import math
+import asyncio
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
 from agent.audio import (
     AudioQualityGate,
+    APMFrameProcessor,
     NoiseSuppressionLayer,
     MIN_AUDIO_RMS_THRESHOLD,
     MIN_STT_CONFIDENCE_THRESHOLD,
 )
 from agent.session import VoicePhoneSession
+from livekit.agents import RoomInputOptions
 
 
 class MockAudioFrame:
-    """Mock audio frame containing raw PCM byte data."""
+    """Mock audio frame containing 16-bit PCM bytes."""
     def __init__(self, pcm_bytes: bytes):
         self.data = pcm_bytes
 
@@ -32,86 +38,43 @@ class MockSTTEvent:
         self.confidence = confidence
 
 
-class TestAudioQualityAndProcessing:
-    """Verifies audio quality gate, RMS energy calculation, and APM layer."""
+class TestRMSEnergyCalculation:
+    """Verifies RMS energy calculation across various audio frame conditions."""
 
-    def test_1_rms_calculation_with_known_pcm_samples(self):
-        """
-        1. RMS calculation with known PCM samples.
-        Known constant 16-bit PCM amplitude of 3276.8 yields exactly RMS ~ 0.10.
-        """
-        sample_val = 3277
+    def test_valid_nonsilent_frame_positive_rms(self):
+        """1. Valid non-silent frame produces a positive, accurate RMS."""
+        sample_val = 3277  # ~10% amplitude in 16-bit PCM
         samples = array.array("h", [sample_val] * 1000)
         frame = MockAudioFrame(samples.tobytes())
 
         rms = AudioQualityGate.calculate_rms_energy(frame)
         expected = sample_val / 32768.0
         assert math.isclose(rms, expected, rel_tol=1e-3)
-        assert rms > 0.09 and rms < 0.11
+        assert rms > 0.05
 
-    def test_2_empty_audio_frame(self):
-        """
-        2. Empty audio frame returns 0.0 energy.
-        """
+    def test_silent_frame_produces_zero_rms(self):
+        """2. Silent frame produces approximately zero RMS."""
+        silence_samples = array.array("h", [0] * 1000)
+        frame = MockAudioFrame(silence_samples.tobytes())
+
+        rms = AudioQualityGate.calculate_rms_energy(frame)
+        assert rms == 0.0
+
+    def test_empty_or_none_frame_safely_produces_zero(self):
+        """3. Empty/invalid frame safely produces zero energy."""
         empty_frame = MockAudioFrame(b"")
-        rms_empty = AudioQualityGate.calculate_rms_energy(empty_frame)
-        assert rms_empty == 0.0
+        assert AudioQualityGate.calculate_rms_energy(empty_frame) == 0.0
+        assert AudioQualityGate.calculate_rms_energy(None) == 0.0
 
-        none_frame_rms = AudioQualityGate.calculate_rms_energy(None)
-        assert none_frame_rms == 0.0
-
-    def test_3_low_energy_audio_rejection(self):
-        """
-        3. Low-energy audio rejection (inaudible/silence below MIN_AUDIO_RMS_THRESHOLD).
-        """
-        gate = AudioQualityGate()
-        low_energy = MIN_AUDIO_RMS_THRESHOLD / 2.0  # 0.005 < 0.01
-        is_ok, reason = gate.is_acceptable_quality(rms_energy=low_energy, stt_confidence=0.95)
-        assert is_ok is False
-        assert "Signal energy too low" in reason
-
-    def test_4_normal_energy_audio_acceptance(self):
-        """
-        4. Normal-energy audio acceptance.
-        """
-        gate = AudioQualityGate()
-        normal_energy = 0.08  # well above 0.01 threshold
-        is_ok, reason = gate.is_acceptable_quality(rms_energy=normal_energy, stt_confidence=0.92)
-        assert is_ok is True
-        assert "acceptable" in reason.lower()
-
-    def test_5_low_stt_confidence_rejection(self):
-        """
-        5. Low STT confidence rejection (below MIN_STT_CONFIDENCE_THRESHOLD=0.40).
-        """
-        gate = AudioQualityGate()
-        low_confidence = 0.25
-        is_ok, reason = gate.is_acceptable_quality(rms_energy=0.08, stt_confidence=low_confidence)
-        assert is_ok is False
-        assert "STT confidence too low" in reason
-
-    def test_6_good_stt_confidence_acceptance(self):
-        """
-        6. Good STT confidence acceptance.
-        """
-        gate = AudioQualityGate()
-        good_confidence = 0.95
-        is_ok, reason = gate.is_acceptable_quality(rms_energy=0.08, stt_confidence=good_confidence)
-        assert is_ok is True
-        assert "acceptable" in reason.lower()
-
-    def test_7_rms_calculation_failure_does_not_pass(self):
-        """
-        7. RMS calculation failure returns 0.0 (fails quality gate, does NOT silently pass).
-        """
+    def test_measurement_errors_do_not_become_accepted_audio(self):
+        """4. Measurement errors safely return 0.0 (fails quality gate, does NOT pass)."""
         class CorruptedFrame:
             @property
             def data(self):
-                raise ValueError("Corrupted memory buffer")
+                raise RuntimeError("Hardware buffer read error")
 
         corrupted = CorruptedFrame()
         rms = AudioQualityGate.calculate_rms_energy(corrupted)
-        # Must return 0.0 (explicit failure), not an acceptable fallback like 0.05
         assert rms == 0.0
 
         gate = AudioQualityGate()
@@ -119,35 +82,107 @@ class TestAudioQualityAndProcessing:
         assert is_ok is False
         assert "Signal energy too low" in reason
 
-    def test_8_noise_suppression_apm_initialization(self):
-        """
-        8. Noise suppression / APM initialization behavior.
-        Verifies NoiseSuppressionLayer instantiates cleanly without exceptions.
-        """
-        layer = NoiseSuppressionLayer()
-        assert layer is not None
-        # Passing None frame is handled gracefully without crash
-        assert layer.process_frame(None) is None
+
+class TestAudioQualityGate:
+    """Verifies conservative gating against inaudible speech or low STT confidence."""
+
+    def test_valid_quality_accepted(self):
+        """1. Valid energy and high confidence are accepted."""
+        gate = AudioQualityGate()
+        is_ok, reason = gate.is_acceptable_quality(rms_energy=0.08, stt_confidence=0.95)
+        assert is_ok is True
+        assert "acceptable" in reason.lower()
+
+    def test_too_low_rms_quality_rejected(self):
+        """2. Too-low energy (whisper/inaudible < 0.01) is rejected."""
+        gate = AudioQualityGate()
+        low_energy = 0.005
+        is_ok, reason = gate.is_acceptable_quality(rms_energy=low_energy, stt_confidence=0.95)
+        assert is_ok is False
+        assert "Signal energy too low" in reason
+
+    def test_invalid_measurement_zero_rms_rejected(self):
+        """3. Zero RMS (failed measurement or total silence) is rejected."""
+        gate = AudioQualityGate()
+        is_ok, reason = gate.is_acceptable_quality(rms_energy=0.0, stt_confidence=0.90)
+        assert is_ok is False
+        assert "Signal energy too low" in reason
+
+    def test_low_stt_confidence_rejected(self):
+        """4. Low STT confidence (< 0.40) is rejected rather than guessing digits."""
+        gate = AudioQualityGate()
+        low_confidence = 0.25
+        is_ok, reason = gate.is_acceptable_quality(rms_energy=0.08, stt_confidence=low_confidence)
+        assert is_ok is False
+        assert "STT confidence too low" in reason
+
+    def test_good_stt_confidence_accepted(self):
+        """5. Good STT confidence is accepted."""
+        gate = AudioQualityGate()
+        good_confidence = 0.88
+        is_ok, reason = gate.is_acceptable_quality(rms_energy=0.07, stt_confidence=good_confidence)
+        assert is_ok is True
+        assert "acceptable" in reason.lower()
 
 
-def test_interim_events_ignored_and_only_final_processed():
+class TestNativeLiveKitNoiseProcessing:
+    """Verifies APMFrameProcessor integration with WebRTC and RoomInputOptions."""
+
+    def test_apm_processor_initialization_and_enabled(self):
+        """Verifies native APM explicitly initializes with NS, AEC, AGC, and HPF."""
+        processor = APMFrameProcessor(
+            echo_cancellation=True,
+            noise_suppression=True,
+            high_pass_filter=True,
+            auto_gain_control=True,
+        )
+        assert processor.enabled is True
+        assert processor._apm is not None
+
+    def test_apm_process_frame_is_invoked(self):
+        """Verifies frame processing method executes and tracks speech energy."""
+        processor = APMFrameProcessor()
+        sample_val = 3277
+        samples = array.array("h", [sample_val] * 500)
+        frame = MockAudioFrame(samples.tobytes())
+
+        # Process frame
+        processed = processor.process_frame(frame)
+        assert processed is frame
+
+        # Energy tracking must capture the speech amplitude
+        peak_rms = processor.get_and_reset_utterance_rms()
+        assert peak_rms > 0.05
+
+        # Reset ensures subsequent measurement starts clean
+        assert processor.get_and_reset_utterance_rms() == 0.0
+
+    def test_native_room_input_options_integration(self):
+        """Verifies APM processor seamlessly plugs into LiveKit RoomInputOptions."""
+        processor = APMFrameProcessor()
+        options = RoomInputOptions(noise_cancellation=processor)
+        assert options.noise_cancellation is processor
+
+
+def test_interim_events_do_not_modify_conversation_state():
     """
-    Mandatory Fix #2:
     Prove that:
       interim "nine"
       interim "nine eight"
       interim "nine eight seven"
       final   "nine eight seven"
     results in ConversationManager receiving ONLY "nine eight seven",
-    not all four events.
+    not intermediate fragments.
     """
-    import asyncio
-
     async def _test():
         ctx = MagicMock()
         session = VoicePhoneSession(ctx)
         session._session = MagicMock()
         session._session.say = AsyncMock()
+
+        # Simulate speech audio passing into APM processor during utterance
+        samples = array.array("h", [3277] * 500)
+        session.apm_processor.process_frame(MockAudioFrame(samples.tobytes()))
 
         interim1 = MockSTTEvent(transcript="nine", is_final=False)
         interim2 = MockSTTEvent(transcript="nine eight", is_final=False)
@@ -159,13 +194,13 @@ def test_interim_events_ignored_and_only_final_processed():
         await session._on_user_transcript(interim2)
         await session._on_user_transcript(interim3)
 
-        # ConversationManager must have received ZERO transcripts so far
+        # ConversationManager must have received ZERO transcripts from interim events
         assert len(session.conversation.accumulated_transcripts) == 0
 
-        # Now send the final event
+        # Now send final event
         await session._on_user_transcript(final_ev)
 
-        # ConversationManager must have received ONLY the final utterance: "nine eight seven"
+        # ConversationManager must have received ONLY the final completed transcript
         assert session.conversation.accumulated_transcripts == ["nine eight seven"]
         assert len(session.conversation.accumulated_transcripts) == 1
 

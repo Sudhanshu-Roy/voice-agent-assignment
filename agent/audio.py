@@ -8,6 +8,7 @@ import math
 import logging
 from typing import Optional, Tuple, Any
 
+from livekit import rtc
 from livekit.rtc import AudioProcessingModule, AudioFrame
 from livekit.plugins import silero
 
@@ -71,30 +72,89 @@ class AudioQualityGate:
         return True, "Audio quality acceptable"
 
 
-class NoiseSuppressionLayer:
+class APMFrameProcessor(rtc.FrameProcessor[AudioFrame]):
     """
-    WebRTC Native Audio Processing Module (APM) wrapper.
-    LiveKit's WebRTC audio transport provides native WebRTC Acoustic Echo Cancellation
-    (AEC), Noise Suppression (NS), and Automatic Gain Control (AGC) on incoming audio tracks.
-    This class provides frame-level APM processing when individual PCM frames are intercepted.
+    LiveKit native FrameProcessor integrating WebRTC AudioProcessingModule (APM).
+    Explicitly enables:
+    - Noise Suppression (NS)
+    - Acoustic Echo Cancellation (AEC)
+    - High-Pass Filter (HPF)
+    - Automatic Gain Control (AGC)
+
+    Directly passed to LiveKit RoomInputOptions(noise_cancellation=...) so that
+    incoming participant audio is filtered through WebRTC APM BEFORE reaching STT.
+    Also tracks speech energy across the utterance window (preventing silence-tail falsing).
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        echo_cancellation: bool = True,
+        noise_suppression: bool = True,
+        high_pass_filter: bool = True,
+        auto_gain_control: bool = True,
+    ):
+        super().__init__()
+        self._enabled = True
         try:
-            self._apm = AudioProcessingModule()
-            logger.info("Native WebRTC AudioProcessingModule (APM) initialized successfully.")
+            self._apm = AudioProcessingModule(
+                echo_cancellation=echo_cancellation,
+                noise_suppression=noise_suppression,
+                high_pass_filter=high_pass_filter,
+                auto_gain_control=auto_gain_control,
+            )
+            logger.info("LiveKit WebRTC APM FrameProcessor initialized with active Noise Suppression, AEC, AGC, and HPF.")
         except Exception as e:
             logger.warning(f"Could not initialize native APM: {e}")
             self._apm = None
 
-    def process_frame(self, frame: AudioFrame) -> AudioFrame:
-        """Process audio frame through native APM for real noise suppression."""
-        if self._apm and frame:
+        self._utterance_peak_rms: float = 0.0
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, value: bool) -> None:
+        self._enabled = value
+
+    def _process(self, frame: AudioFrame) -> AudioFrame:
+        """Process incoming audio frame through native APM and track utterance speech energy."""
+        if not self._enabled or frame is None:
+            return frame
+
+        # Apply real WebRTC noise suppression to the audio stream reaching STT
+        if self._apm:
             try:
                 self._apm.process_stream(frame)
             except Exception as e:
                 logger.debug(f"APM process_stream notice: {e}")
+
+        # Track peak speech energy across the utterance window
+        rms = AudioQualityGate.calculate_rms_energy(frame)
+        if rms > self._utterance_peak_rms:
+            self._utterance_peak_rms = rms
+
         return frame
+
+    def process_frame(self, frame: AudioFrame) -> AudioFrame:
+        """Direct frame processing helper."""
+        return self._process(frame)
+
+    def get_and_reset_utterance_rms(self) -> float:
+        """
+        Retrieves the peak speech RMS energy captured during the utterance,
+        and resets for the subsequent utterance.
+        """
+        val = self._utterance_peak_rms
+        self._utterance_peak_rms = 0.0
+        return val
+
+    def _close(self) -> None:
+        pass
+
+
+# Backward-compatible alias
+NoiseSuppressionLayer = APMFrameProcessor
 
 
 def get_vad(min_silence_duration: float = 2.0):

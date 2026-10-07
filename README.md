@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
 [![LiveKit Agents](https://img.shields.io/badge/LiveKit_Agents-v1.8.5-002B49.svg)](https://livekit.io/)
 [![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev/)
-[![Tests](https://img.shields.io/badge/Tests-108%20Passed-success.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-112%20Passed-success.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An enterprise-grade, deterministic multilingual voice agent whose sole purpose is to accurately collect valid 10-digit Indian mobile phone numbers through natural conversation.
@@ -36,17 +36,14 @@ The system explicitly decouples speech recognition and conversational pacing fro
 ```mermaid
 graph TD
     User([User Voice / Microphone]) --> LiveKit[LiveKit WebRTC Audio Track]
-    LiveKit --> AudioStream[AudioStream PCM Frames]
-    AudioStream --> NoiseSuppression[WebRTC Native APM Layer]
-    NoiseSuppression --> RMSCalculation[Real PCM RMS Energy Calculation]
-    RMSCalculation --> QualityGate{Audio Quality Gate}
-    QualityGate -- Low RMS Energy (< 0.01) --> RepeatPrompt[Prompt User to Repeat]
-    LiveKit --> STT[Deepgram Nova-3 STT: model=nova-3, language=multi]
+    LiveKit --> RoomIO[LiveKit RoomInputOptions Audio Input]
+    RoomIO --> NoiseCancellation[Native WebRTC APM Noise Cancellation: NS, AEC, AGC, HPF]
+    NoiseCancellation --> STT[Deepgram Nova-3 STT: model=nova-3, language=multi]
     STT --> InterimFilter{is_final Check}
     InterimFilter -- False (Interim) --> Drop[Discard Streaming Token]
-    InterimFilter -- True (Final) --> FinalConfidence{Confidence >= 0.40}
-    FinalConfidence -- Low Confidence --> RepeatPrompt
-    FinalConfidence -- Valid --> ConversationManager[Conversation Manager & Turn Detector]
+    InterimFilter -- True (Final) --> QualityGate{Audio Quality Gate: Confidence >= 0.40 & Energy >= 0.01}
+    QualityGate -- Low Quality / Inaudible --> RepeatPrompt[Prompt User to Repeat]
+    QualityGate -- Acceptable --> ConversationManager[Conversation Manager & Turn Detector]
     ConversationManager --> PhoneParser[Deterministic Phone Parser]
     PhoneParser --> Validator{Indian Mobile Validator}
     Validator -- Invalid / Incomplete --> ConversationManager
@@ -67,7 +64,7 @@ graph TD
 4. **Pause Tolerance & Turn Detection:** Waits silently for up to 4 seconds while a number is incomplete, preventing premature agent interruption.
 5. **Deterministic Self-Correction:** Detects speech pivot words (`sorry`, `wait`, `no`, `nahi`, `nahin`, `galat`, `scratch that`) and prioritizes the corrected recitation.
 6. **Digit-by-Digit Confirmation:** Spells out digits individually (e.g., *"9, 8, 7, 6, 5, 4, 3, 2, 1, 0"*), preventing TTS engines from reading large numbers (e.g., *"nine billion..."*).
-7. **Real Audio Processing & Quality Gate:** Subscribes to remote participant `AudioStream(track)`, calculates real PCM Root Mean Square (RMS) signal energy, and gates audio without hardcoded fake constants.
+7. **Native LiveKit Noise Cancellation & Energy Gate:** Integrates native WebRTC APM FrameProcessor directly into `RoomInputOptions(noise_cancellation=...)` (filtering audio frames before STT) and evaluates utterance-synchronized speech energy and confidence.
 8. **Configurable Providers:** Pluggable STT (`Deepgram Nova-3` multilingual / `OpenAI Whisper`) and TTS (`ElevenLabs Multilingual v2` / `OpenAI TTS`).
 9. **Developer Dashboard:** Live React dashboard showing total collected numbers, language distribution, search, filters, full transcript viewer, and record deletion.
 
@@ -78,12 +75,12 @@ graph TD
 | Layer | Technologies |
 |---|---|
 | **Voice Agent Runtime** | Python 3.11+, LiveKit Agents SDK v1.8.5, Silero VAD |
-| **Audio Processing** | WebRTC Native APM (`livekit.rtc.AudioProcessingModule`), Real PCM RMS Gate |
+| **Audio Processing** | Native LiveKit WebRTC APM (`APMFrameProcessor` via `RoomInputOptions`), PCM RMS Gate |
 | **STT Providers** | Deepgram Nova-3 (`model="nova-3"`, `language="multi"`), OpenAI Whisper |
 | **TTS Providers** | ElevenLabs (`eleven_multilingual_v2`), OpenAI TTS |
 | **Backend API** | FastAPI 0.142.2, Uvicorn 0.54.0, Pydantic v2 |
 | **Database & ORM** | SQLite, SQLAlchemy 2.1.3 |
-| **Testing** | Pytest (108 unit and integration tests across 7 test suites) |
+| **Testing** | Pytest (112 unit and integration tests across 7 test suites) |
 | **Dashboard** | React 18, Vite 5, Lucide Icons, Pure CSS |
 
 ---
@@ -127,7 +124,7 @@ voice-phone-agent/
 │   ├── package.json               # Node dependencies
 │   └── vite.config.js             # Vite configuration
 │
-├── tests/                         # Comprehensive Pytest Suite (108 tests)
+├── tests/                         # Comprehensive Pytest Suite (112 tests)
 │   ├── test_phone_parser.py       # Grouping, words, repetitions, dialects
 │   ├── test_validation.py         # 10-digit validation & confirmation intent
 │   ├── test_language_detection.py # English, Hindi, and Hinglish classification
@@ -335,7 +332,7 @@ python -m agent.main dev
 
 ## 🧪 Running Tests
 
-The test suite contains **108 automated tests** covering edge cases, Indian mobile validation rules, phonetic variants, repetitions, self-corrections, API endpoints, audio quality gate, APM initialization, and conversation flows.
+The test suite contains **112 automated tests** covering edge cases, Indian mobile validation rules, phonetic variants, repetitions, self-corrections, API endpoints, audio quality gate, APM initialization, and conversation flows.
 
 Run all tests:
 ```bash
