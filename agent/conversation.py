@@ -1,7 +1,8 @@
 """
-Conversation state machine and dialog manager for phone number collection.
-Handles pauses, segment combining, self-correction, digit-by-digit confirmation,
-and backend persistence.
+Conversation state machine for phone number collection.
+
+Tracks COLLECTING -> CONFIRMING -> SAVED, combines paused segments,
+and saves only after the user confirms.
 """
 
 import os

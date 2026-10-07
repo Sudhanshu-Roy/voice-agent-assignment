@@ -1,6 +1,4 @@
-"""
-FastAPI application entrypoint for VAIU AI Voice Agent Phone Collection backend.
-"""
+"""FastAPI entrypoint for the phone collection backend."""
 
 import os
 import logging
@@ -33,10 +31,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="VAIU AI Voice Agent Phone Backend",
-    description="Backend API for storing and retrieving phone numbers collected by LiveKit voice agent",
+    title="Phone Collection API",
+    description="Stores phone numbers collected by the LiveKit voice agent",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS configuration

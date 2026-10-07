@@ -1,6 +1,6 @@
 """
-Audio processing, WebRTC noise suppression, real audio quality gating,
-and configurable STT / TTS provider factories.
+WebRTC APM noise processing, RMS/confidence quality gate,
+and STT / TTS provider factories.
 """
 
 import os

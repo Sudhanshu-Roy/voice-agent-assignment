@@ -40,13 +40,10 @@ def is_correction_token(token: str, prev_token: str = "", next_token: str = "") 
     if cleaned in CORRECTION_KEYWORDS:
         return True
 
-    # 'no' as a correction marker:
-    # When separated by dashes/punctuation, e.g. "— no —" or "seven, no, eight"
-    # or occurring in the middle of digit recitation (prev and next are digits or words).
-    if cleaned == "no":
-        # If 'no' is preceded by something and followed by something
-        if prev_token or next_token:
-            return True
+    # Treat "no" as a correction only when it sits between other tokens
+    # (e.g. "seven — no — eight"), not when it is the whole utterance.
+    if cleaned == "no" and prev_token and next_token:
+        return True
 
     return False
 

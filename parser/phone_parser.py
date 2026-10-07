@@ -1,7 +1,6 @@
 """
-Deterministic phone number parser for English, Hindi, and Hinglish speech transcripts.
-Converts spoken words, digit clusters, repetitions, and natural language into validated
-10-digit Indian mobile numbers without using an LLM.
+parsePhoneNumber — maps spoken English / Hindi / Hinglish transcripts
+to a validated 10-digit Indian mobile number. No LLM involved.
 """
 
 import re

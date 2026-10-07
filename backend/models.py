@@ -2,9 +2,13 @@
 SQLAlchemy ORM models for phone number persistence.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, Index
 from backend.database import Base
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 
 class PhoneRecord(Base):
@@ -14,7 +18,7 @@ class PhoneRecord(Base):
     rawTranscript = Column(Text, nullable=False)
     parsedNumber = Column(String(15), nullable=False, index=True)
     language = Column(String(10), nullable=False, index=True)
-    collectedAt = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    collectedAt = Column(DateTime, default=_utc_now, nullable=False, index=True)
 
     __table_args__ = (
         Index("ix_phone_records_number_date", "parsedNumber", "collectedAt"),

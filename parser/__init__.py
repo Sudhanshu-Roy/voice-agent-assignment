@@ -1,6 +1,4 @@
-"""
-Parser package for VAIU AI Voice Agent Phone Number Collection.
-"""
+"""Phone number parsing package."""
 
 from parser.phone_parser import (
     parse_phone_number,

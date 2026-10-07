@@ -1,6 +1,7 @@
 livekit-agents==1.8.5
 livekit-plugins-deepgram==1.8.5
 livekit-plugins-elevenlabs==1.8.5
+livekit-plugins-openai==1.8.5
 livekit-plugins-silero==1.8.5
 fastapi==0.142.2
 uvicorn==0.54.0
@@ -10,3 +11,4 @@ pytest==9.1.1
 httpx==0.28.1
 python-dotenv==1.2.4
 requests==2.34.2
+

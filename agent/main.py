@@ -1,8 +1,8 @@
 """
-CLI Entrypoint for VAIU AI Voice Agent.
-Supports:
-- python -m agent.main dev   -> Run LiveKit Agent worker (production / WebRTC connection)
-- python -m agent.main test  -> Interactive local dialog & parser tester with backend integration
+CLI entry for the voice phone agent.
+
+  python -m agent.main test   - local dialog tester (no LiveKit credentials needed)
+  python -m agent.main dev    - LiveKit worker (needs .env credentials)
 """
 
 import sys
@@ -11,36 +11,32 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("vaiu.agent.main")
 
 
 async def run_interactive_test():
     """
-    Interactive local tester for the complete conversation loop.
-    Allows testing:
-    - English input ('nine eight seven six five four three two one zero')
-    - Hindi input ('nau aath saat chhe paanch chaar teen do ek shunya')
-    - Hinglish ('nine aath saat 6 5 chaar 3 2 1 zero')
-    - Pause simulation ('nine eight seven six' followed by pause, then remainder)
-    - Self-correction ('nine eight seven sorry nine eight six seven five four three two one zero')
-    - Confirmation ('yes' / 'haan' -> saves to backend!)
+    Local tester for the conversation loop.
+    Useful examples:
+      nine eight seven six five four three two one zero
+      nau aath saat chhe paanch chaar teen do ek shunya
+      nine aath saat 6 5 chaar 3 2 1 zero
+      nine eight seven wait sorry nine eight six seven five four three two one zero
+    Type 'pause' to simulate the 4s silence timeout.
     """
     from agent.conversation import ConversationManager, DialogState
-    print("\n" + "=" * 60)
-    print("VAIU AI VOICE AGENT — Interactive Dialog Tester")
-    print("=" * 60)
-    print("Type simulated user speech or commands:")
-    print("  'exit' to quit")
-    print("  'reset' to restart conversation")
-    print("  'pause' to simulate 4-second silence timeout")
-    print("=" * 60 + "\n")
+
+    print("\n" + "-" * 56)
+    print("Voice agent — interactive tester")
+    print("-" * 56)
+    print("Commands: exit | reset | pause")
+    print("-" * 56 + "\n")
 
     manager = ConversationManager()
     greeting = manager.start_conversation()
@@ -52,51 +48,48 @@ async def run_interactive_test():
             if not user_input:
                 continue
             if user_input.lower() == "exit":
-                print("Exiting tester. Goodbye!")
+                print("Bye.")
                 break
             if user_input.lower() == "reset":
                 greeting = manager.start_conversation()
                 print(f"Agent: {greeting}\n")
                 continue
             if user_input.lower() == "pause":
-                print("[Simulating 4s silence timeout...]")
+                print("[simulating 4s silence...]")
                 prompt = manager.handle_incomplete_timeout()
                 if prompt:
                     print(f"Agent: {prompt}\n")
                 else:
-                    print("Agent: (No timeout prompt needed)\n")
+                    print("Agent: (nothing to prompt)\n")
                 continue
 
             reply, state = await manager.handle_user_speech(user_input)
             if reply:
                 print(f"Agent: {reply}\n")
             else:
-                print(f"Agent: (Waiting silently for more digits... state: {state.value})\n")
+                print(f"Agent: (waiting for more digits... [{state.value}])\n")
 
             if state == DialogState.SAVED:
-                print("[Dialog Finished — Phone Number Saved! Type 'reset' to start again.]\n")
+                print("[saved — type reset to collect another]\n")
 
         except (KeyboardInterrupt, EOFError):
-            print("\nExiting tester.")
+            print("\nBye.")
             break
 
 
 def run_livekit_worker():
-    """
-    Runs the LiveKit Agents worker application.
-    """
+    """Start the LiveKit Agents worker."""
     from livekit.agents import JobContext, WorkerOptions, cli
     from agent.session import VoicePhoneSession
 
-    # Verify environment
     livekit_url = os.getenv("LIVEKIT_URL")
     livekit_api_key = os.getenv("LIVEKIT_API_KEY")
     livekit_api_secret = os.getenv("LIVEKIT_API_SECRET")
 
     if not all([livekit_url, livekit_api_key, livekit_api_secret]):
         logger.warning(
-            "LiveKit environment variables (LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET) "
-            "are not fully configured in .env. LiveKit worker may fail to connect to LiveKit Cloud."
+            "LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET are not fully set. "
+            "Worker may fail to connect. Use 'python -m agent.main test' offline."
         )
 
     async def entrypoint(ctx: JobContext):
@@ -107,7 +100,6 @@ def run_livekit_worker():
         entrypoint_fnc=entrypoint,
         agent_name="vaiu-phone-agent",
     )
-
     cli.run_app(options)
 
 
@@ -115,7 +107,6 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         asyncio.run(run_interactive_test())
     else:
-        # Default or 'dev' / 'start' command runs LiveKit worker
         run_livekit_worker()
 
 

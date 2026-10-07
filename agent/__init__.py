@@ -1,6 +1,4 @@
-"""
-Voice Agent package for VAIU AI Phone Number Collection.
-"""
+"""Voice agent package."""
 
 from agent.conversation import ConversationManager, DialogState
 from agent.audio import NoiseSuppressionLayer, AudioQualityGate, get_stt, get_tts, get_vad
