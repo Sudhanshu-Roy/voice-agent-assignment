@@ -1,5 +1,5 @@
 """
-Audio processing, real WebRTC noise suppression, quality confidence gating,
+Audio processing, WebRTC noise suppression, real audio quality gating,
 and configurable STT / TTS provider factories.
 """
 
@@ -20,16 +20,23 @@ MIN_STT_CONFIDENCE_THRESHOLD = 0.40  # Minimum confidence required before trusti
 
 class AudioQualityGate:
     """
-    Conservative audio quality and confidence gate.
-    Evaluates audio signal energy and STT confidence to prevent
+    Conservative audio quality and confidence gate based on real audio metrics.
+    Evaluates real PCM audio signal energy and STT confidence to prevent
     hallucinating phone digits on ambient noise.
     """
 
     @staticmethod
-    def calculate_rms_energy(frame: AudioFrame) -> float:
-        """Calculate Root Mean Square (RMS) energy from PCM audio frame."""
+    def calculate_rms_energy(frame: Optional[AudioFrame]) -> float:
+        """
+        Calculate Root Mean Square (RMS) energy from PCM audio frame.
+        If frame is empty or invalid, returns 0.0 (representing inaudible/failed signal,
+        which fails the quality gate).
+        """
+        if frame is None:
+            return 0.0
+
         try:
-            data = frame.data
+            data = getattr(frame, "data", None)
             if not data:
                 return 0.0
             import array
@@ -66,9 +73,10 @@ class AudioQualityGate:
 
 class NoiseSuppressionLayer:
     """
-    Real WebRTC Native Audio Processing Module (APM) wrapper.
-    Applies real-time noise suppression, acoustic echo cancellation (AEC),
-    and automatic gain control (AGC) directly to audio frames.
+    WebRTC Native Audio Processing Module (APM) wrapper.
+    LiveKit's WebRTC audio transport provides native WebRTC Acoustic Echo Cancellation
+    (AEC), Noise Suppression (NS), and Automatic Gain Control (AGC) on incoming audio tracks.
+    This class provides frame-level APM processing when individual PCM frames are intercepted.
     """
 
     def __init__(self):
@@ -81,7 +89,7 @@ class NoiseSuppressionLayer:
 
     def process_frame(self, frame: AudioFrame) -> AudioFrame:
         """Process audio frame through native APM for real noise suppression."""
-        if self._apm:
+        if self._apm and frame:
             try:
                 self._apm.process_stream(frame)
             except Exception as e:
@@ -107,13 +115,17 @@ def get_stt() -> Any:
     """
     Configurable STT factory supporting Deepgram and OpenAI Whisper.
     Reads STT_PROVIDER environment variable ('deepgram' or 'openai').
+    Enforces real provider credentials in live production mode.
     """
     provider = os.getenv("STT_PROVIDER", "deepgram").lower().strip()
 
     if provider == "deepgram":
         api_key = os.getenv("DEEPGRAM_API_KEY")
         if not api_key:
-            logger.warning("DEEPGRAM_API_KEY not configured. Falling back or running in test mode.")
+            raise RuntimeError(
+                "DEEPGRAM_API_KEY environment variable is required for live Deepgram STT. "
+                "Please configure DEEPGRAM_API_KEY in your .env file, or run 'python -m agent.main test' for offline dialog testing."
+            )
         from livekit.plugins import deepgram
         model = os.getenv("DEEPGRAM_MODEL", "nova-3")
         language = os.getenv("DEEPGRAM_LANGUAGE", "multi")
@@ -125,17 +137,20 @@ def get_stt() -> Any:
             interim_results=True,
             punctuate=True,
             numerals=True,
-            api_key=api_key or "local_dev_key"
+            api_key=api_key
         )
     elif provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            logger.warning("OPENAI_API_KEY not configured.")
+            raise RuntimeError(
+                "OPENAI_API_KEY environment variable is required for OpenAI Whisper STT. "
+                "Please configure OPENAI_API_KEY in your .env file."
+            )
         from livekit.plugins import openai
         logger.info("Initializing OpenAI Whisper STT...")
         return openai.STT(
             model="whisper-1",
-            api_key=api_key or "local_dev_key"
+            api_key=api_key
         )
     else:
         raise ValueError(f"Unsupported STT_PROVIDER: {provider}. Supported: 'deepgram', 'openai'")
@@ -145,29 +160,36 @@ def get_tts() -> Any:
     """
     Configurable TTS factory supporting ElevenLabs and OpenAI fallback.
     Reads TTS_PROVIDER environment variable ('elevenlabs' or 'openai').
+    Enforces real provider credentials in live production mode.
     """
     provider = os.getenv("TTS_PROVIDER", "elevenlabs").lower().strip()
 
     if provider == "elevenlabs":
         api_key = os.getenv("ELEVENLABS_API_KEY")
         if not api_key:
-            logger.warning("ELEVENLABS_API_KEY not configured.")
+            raise RuntimeError(
+                "ELEVENLABS_API_KEY environment variable is required for live ElevenLabs TTS. "
+                "Please configure ELEVENLABS_API_KEY in your .env file, or run 'python -m agent.main test' for offline dialog testing."
+            )
         from livekit.plugins import elevenlabs
         logger.info("Initializing ElevenLabs TTS (eleven_multilingual_v2 model)...")
         return elevenlabs.TTS(
             model="eleven_multilingual_v2",
-            api_key=api_key or "local_dev_key"
+            api_key=api_key
         )
     elif provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            logger.warning("OPENAI_API_KEY not configured.")
+            raise RuntimeError(
+                "OPENAI_API_KEY environment variable is required for OpenAI TTS. "
+                "Please configure OPENAI_API_KEY in your .env file."
+            )
         from livekit.plugins import openai
         logger.info("Initializing OpenAI TTS fallback...")
         return openai.TTS(
             model="tts-1",
             voice="alloy",
-            api_key=api_key or "local_dev_key"
+            api_key=api_key
         )
     else:
         raise ValueError(f"Unsupported TTS_PROVIDER: {provider}. Supported: 'elevenlabs', 'openai'")

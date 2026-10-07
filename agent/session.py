@@ -85,20 +85,28 @@ class VoicePhoneSession:
         # Register event handlers
         @self._session.on("user_input_transcribed")
         def on_user_input_transcribed(event):
+            if hasattr(event, "is_final") and not event.is_final:
+                return
+            if not getattr(event, "is_final", True):
+                return
             asyncio.create_task(self._on_user_transcript(event))
 
         # Define explicit Agent with deterministic instructions
         agent = Agent(
             instructions=(
-                "You are a deterministic phone-number collection voice agent for VAIU AI. "
-                "Your only purpose is to accurately collect and confirm a valid 10-digit Indian mobile number. "
-                "Never guess, invent, or infer phone numbers."
+                "You are a deterministic phone-number collection agent. "
+                "Your only purpose is to collect and confirm a valid "
+                "10-digit Indian mobile number. "
+                "Never guess, infer, or invent phone digits."
             )
         )
 
-        # Correct LiveKit 1.8.5 start syntax with explicit agent and room
+        # Correct LiveKit 1.8.5 start syntax with explicit room and agent
         logger.info("Starting AgentSession with LiveKit 1.8.5 Agent...")
-        await self._session.start(agent=agent, room=self.ctx.room)
+        await self._session.start(
+            room=self.ctx.room,
+            agent=agent,
+        )
 
         # Initial greeting
         greeting = self.conversation.start_conversation()

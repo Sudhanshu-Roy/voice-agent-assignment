@@ -111,6 +111,6 @@ class TestSTTAndAudioQuality:
     def test_audio_quality_gate_low_stt_confidence_rejected(self):
         """Low STT confidence must be rejected instead of guessing."""
         gate = AudioQualityGate()
-        is_ok, reason = gate.is_acceptable_quality(rms_energy=0.05, stt_confidence=0.25)
+        is_ok, reason = gate.is_acceptable_quality(rms_energy=0.15, stt_confidence=0.25)
         assert is_ok is False
         assert "STT confidence too low" in reason
