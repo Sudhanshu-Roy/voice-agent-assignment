@@ -101,3 +101,30 @@ class TestConversationFlow:
             assert "9, 8, 6, 7, 5, 4, 3, 2, 1, 0" in reply
 
         asyncio.run(_run())
+
+    def test_no_persistence_before_confirmation(self):
+        """Verifies strictly that no DB save is triggered while collecting or on invalid input."""
+        async def _run():
+            manager = ConversationManager()
+            manager.start_conversation()
+
+            with patch.object(manager, "_persist_phone_number", new_callable=AsyncMock) as mock_save:
+                # 1. Partial input
+                await manager.handle_user_speech("nine eight seven")
+                mock_save.assert_not_called()
+
+                # 2. Invalid input
+                await manager.handle_user_speech("five one two three four five six seven eight nine")
+                mock_save.assert_not_called()
+
+                # 3. Completed digits, awaiting confirmation
+                await manager.handle_user_speech("nine eight seven six five four three two one zero")
+                assert manager.state == DialogState.CONFIRMING
+                mock_save.assert_not_called()
+
+                # 4. User says 'no'
+                await manager.handle_user_speech("no")
+                assert manager.state == DialogState.COLLECTING
+                mock_save.assert_not_called()
+
+        asyncio.run(_run())

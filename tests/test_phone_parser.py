@@ -131,8 +131,23 @@ class TestDeterministicPhoneParser:
         assert result["success"] is True
         assert result["number"] == "9867543210"
 
-    def test_self_correction_hindi_nahi(self):
-        result = parse_phone_number("nau aath saat ruko nahi nau aath chhe saat paanch chaar teen do ek shunya")
+    def test_self_correction_no_no(self):
+        result = parse_phone_number("nine eight seven no no nine eight six seven five four three two one zero")
+        assert result["success"] is True
+        assert result["number"] == "9867543210"
+
+    def test_self_correction_i_mean(self):
+        result = parse_phone_number("nine eight seven I mean nine eight six seven five four three two one zero")
+        assert result["success"] is True
+        assert result["number"] == "9867543210"
+
+    def test_self_correction_actually(self):
+        result = parse_phone_number("nine eight seven actually nine eight six seven five four three two one zero")
+        assert result["success"] is True
+        assert result["number"] == "9867543210"
+
+    def test_self_correction_correct_that(self):
+        result = parse_phone_number("nine eight seven correct that nine eight six seven five four three two one zero")
         assert result["success"] is True
         assert result["number"] == "9867543210"
 

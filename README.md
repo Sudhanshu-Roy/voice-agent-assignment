@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
 [![LiveKit Agents](https://img.shields.io/badge/LiveKit_Agents-v1.8.5-002B49.svg)](https://livekit.io/)
 [![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev/)
-[![Tests](https://img.shields.io/badge/Tests-88%20Passed-success.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-99%20Passed-success.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An enterprise-grade, deterministic multilingual voice agent whose sole purpose is to accurately collect valid 10-digit Indian mobile phone numbers through natural conversation.

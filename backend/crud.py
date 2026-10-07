@@ -47,6 +47,9 @@ def get_phone_records(
         query = query.filter(PhoneRecord.collectedAt >= start_date)
 
     if end_date:
+        # If end_date is at midnight (pure date selection), expand to end of the full day
+        if end_date.hour == 0 and end_date.minute == 0 and end_date.second == 0 and end_date.microsecond == 0:
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
         query = query.filter(PhoneRecord.collectedAt <= end_date)
 
     total = query.count()

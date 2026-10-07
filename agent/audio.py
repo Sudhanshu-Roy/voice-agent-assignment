@@ -29,7 +29,6 @@ class AudioQualityGate:
     def calculate_rms_energy(frame: AudioFrame) -> float:
         """Calculate Root Mean Square (RMS) energy from PCM audio frame."""
         try:
-            # frame.data is bytes of 16-bit signed PCM
             data = frame.data
             if not data:
                 return 0.0
@@ -44,16 +43,19 @@ class AudioQualityGate:
             return rms
         except Exception as e:
             logger.debug(f"RMS calculation error: {e}")
-            return 0.05  # Neutral fallback
+            return 0.0
 
     @staticmethod
-    def is_acceptable_quality(rms_energy: float, stt_confidence: Optional[float] = None) -> Tuple[bool, str]:
+    def is_acceptable_quality(
+        rms_energy: Optional[float] = None,
+        stt_confidence: Optional[float] = None
+    ) -> Tuple[bool, str]:
         """
-        Conservative gate:
-        - Rejects frames with near-zero energy (microphone muted / muffled)
-        - Rejects transcripts with low STT confidence
+        Conservative quality gate based on real audio metrics:
+        - Rejects audio when measured RMS signal energy is below the speech threshold (inaudible/muted)
+        - Rejects transcripts when STT provider confidence is below acceptable threshold
         """
-        if rms_energy < MIN_AUDIO_RMS_THRESHOLD:
+        if rms_energy is not None and rms_energy < MIN_AUDIO_RMS_THRESHOLD:
             return False, f"Signal energy too low ({rms_energy:.4f} < {MIN_AUDIO_RMS_THRESHOLD})"
 
         if stt_confidence is not None and stt_confidence < MIN_STT_CONFIDENCE_THRESHOLD:
@@ -113,10 +115,12 @@ def get_stt() -> Any:
         if not api_key:
             logger.warning("DEEPGRAM_API_KEY not configured. Falling back or running in test mode.")
         from livekit.plugins import deepgram
-        logger.info("Initializing Deepgram STT (nova-2 model with multilingual Hindi+English support)...")
+        model = os.getenv("DEEPGRAM_MODEL", "nova-3")
+        language = os.getenv("DEEPGRAM_LANGUAGE", "multi")
+        logger.info(f"Initializing Deepgram STT (model={model}, language={language} for simultaneous Hindi+English)...")
         return deepgram.STT(
-            model="nova-2",
-            language="en",  # Nova-2 supports mixed English & Hindi terms when configured
+            model=model,
+            language=language,
             smart_format=True,
             interim_results=True,
             punctuate=True,

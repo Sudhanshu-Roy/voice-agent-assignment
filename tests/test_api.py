@@ -146,6 +146,24 @@ class TestPhoneAPI:
         assert stats["hindi"] == 1
         assert stats["mixed"] == 0
 
+    def test_date_range_filtering_including_end_of_day(self):
+        """End-date filter must include records collected throughout that entire day."""
+        from datetime import date
+        today_str = date.today().isoformat()
+
+        # Insert record today
+        client.post("/api/phone", json={
+            "rawTranscript": "9876543210",
+            "parsedNumber": "9876543210",
+            "language": "en"
+        })
+
+        # Query with end_date=today_str (which defaults to midnight)
+        # Should include the record because end_date is normalized to 23:59:59
+        res = client.get(f"/api/phone?end_date={today_str}")
+        assert res.status_code == 200
+        assert res.json()["total"] >= 1
+
     def test_delete_phone_record(self):
         # Create record
         create_res = client.post("/api/phone", json={

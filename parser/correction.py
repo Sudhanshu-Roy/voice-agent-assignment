@@ -23,6 +23,9 @@ CORRECTION_PHRASE_PATTERNS = [
     r"\bscratch\s+that\b",
     r"\bi\s+mean\b",
     r"\bmy\s+bad\b",
+    r"\bcorrect\s+that\b",
+    r"\bno\s+no\b",
+    r"\bhold\s+on\b",
     r"\barre\s+nahi\b",
     r"\barrey\s+nahi\b",
 ]
