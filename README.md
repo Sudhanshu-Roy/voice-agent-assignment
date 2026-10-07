@@ -121,6 +121,10 @@ npm run dev
 
 Open http://localhost:5173
 
+The dashboard has two tabs:
+- **Talk to agent** — browser mic call over LiveKit (needs worker running)
+- **Records** — list / search / delete collected numbers
+
 ### 5. Agent
 
 **Offline tester** (no LiveKit / STT keys required):
@@ -129,11 +133,13 @@ Open http://localhost:5173
 python -m agent.main test
 ```
 
-**LiveKit worker:**
+**LiveKit worker** (required for the Talk tab):
 
 ```bash
 python -m agent.main dev
 ```
+
+Then open the dashboard → **Talk to agent** → **Start call**, allow the mic, and speak your number.
 
 ## API
 
@@ -144,6 +150,7 @@ python -m agent.main dev
 | `GET` | `/api/phone` | List + search/filter (`search`, `language`, `start_date`, `end_date`) |
 | `GET` | `/api/phone/stats` | Totals by language |
 | `DELETE` | `/api/phone/{id}` | Delete one record |
+| `POST` | `/api/livekit/token` | Browser call token + agent dispatch |
 
 `POST` body:
 

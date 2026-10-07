@@ -80,6 +80,10 @@ async def run_interactive_test():
 def run_livekit_worker():
     """Start the LiveKit Agents worker."""
     from livekit.agents import JobContext, WorkerOptions, cli
+
+    # Plugins must register on the main thread before job workers start.
+    # Importing agent.audio pulls in deepgram / elevenlabs / silero at module load.
+    import agent.audio  # noqa: F401
     from agent.session import VoicePhoneSession
 
     livekit_url = os.getenv("LIVEKIT_URL")
@@ -98,7 +102,7 @@ def run_livekit_worker():
 
     options = WorkerOptions(
         entrypoint_fnc=entrypoint,
-        agent_name="vaiu-phone-agent",
+        agent_name=os.getenv("AGENT_NAME", "vaiu-phone-agent"),
     )
     cli.run_app(options)
 

@@ -7,11 +7,15 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
+  Mic,
+  ClipboardList,
 } from 'lucide-react';
+import TalkPanel from './TalkPanel.jsx';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function App() {
+  const [tab, setTab] = useState('talk');
   const [records, setRecords] = useState([]);
   const [stats, setStats] = useState({ total: 0, english: 0, hindi: 0, mixed: 0 });
   const [loading, setLoading] = useState(true);
@@ -121,186 +125,216 @@ export default function App() {
             <Phone className="brand-mark" />
             <h1>Phone Collection Dashboard</h1>
           </div>
-          <p>Numbers collected by the LiveKit voice agent</p>
+          <p>Talk to the agent, then review collected numbers</p>
         </div>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={loadData}
-          title="Refresh"
-        >
-          <RefreshCw className={`icon ${loading ? 'spin' : ''}`} />
-          Refresh
-        </button>
+        {tab === 'records' && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={loadData}
+            title="Refresh"
+          >
+            <RefreshCw className={`icon ${loading ? 'spin' : ''}`} />
+            Refresh
+          </button>
+        )}
       </header>
 
-      <section className="stats">
-        <div className="stat">
-          <div className="stat-label"><span>Total</span></div>
-          <div className="stat-value">{stats.total}</div>
-          <div className="stat-hint">Validated 10-digit numbers</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label"><span>English</span></div>
-          <div className="stat-value">{stats.english}</div>
-          <div className="stat-hint">language = en</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label"><span>Hindi</span></div>
-          <div className="stat-value">{stats.hindi}</div>
-          <div className="stat-hint">language = hi</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label"><span>Mixed</span></div>
-          <div className="stat-value">{stats.mixed}</div>
-          <div className="stat-hint">language = mixed</div>
-        </div>
-      </section>
+      <nav className="tabs" aria-label="Main">
+        <button
+          type="button"
+          className={`tab ${tab === 'talk' ? 'active' : ''}`}
+          onClick={() => setTab('talk')}
+        >
+          <Mic className="icon" />
+          Talk to agent
+        </button>
+        <button
+          type="button"
+          className={`tab ${tab === 'records' ? 'active' : ''}`}
+          onClick={() => {
+            setTab('records');
+            loadData();
+          }}
+        >
+          <ClipboardList className="icon" />
+          Records
+        </button>
+      </nav>
 
-      <div className="filters">
-        <div className="search-wrap">
-          <Search className="search-icon" />
-          <input
-            type="text"
-            placeholder="Search by phone number..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="filter-row">
-          <select
-            className="filter-select"
-            value={languageFilter}
-            onChange={(e) => setLanguageFilter(e.target.value)}
-          >
-            <option value="">All languages</option>
-            <option value="en">English</option>
-            <option value="hi">Hindi</option>
-            <option value="mixed">Mixed</option>
-          </select>
-          <input
-            type="date"
-            className="date-input"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            title="Start date"
-          />
-          <input
-            type="date"
-            className="date-input"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            title="End date"
-          />
-          {hasFilters && (
-            <button type="button" className="btn btn-ghost" onClick={clearFilters}>
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
+      {tab === 'talk' ? (
+        <TalkPanel />
+      ) : (
+        <>
+          <section className="stats">
+            <div className="stat">
+              <div className="stat-label"><span>Total</span></div>
+              <div className="stat-value">{stats.total}</div>
+              <div className="stat-hint">Validated 10-digit numbers</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label"><span>English</span></div>
+              <div className="stat-value">{stats.english}</div>
+              <div className="stat-hint">language = en</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label"><span>Hindi</span></div>
+              <div className="stat-value">{stats.hindi}</div>
+              <div className="stat-hint">language = hi</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label"><span>Mixed</span></div>
+              <div className="stat-value">{stats.mixed}</div>
+              <div className="stat-hint">language = mixed</div>
+            </div>
+          </section>
 
-      <div className="panel">
-        {loading && records.length === 0 ? (
-          <div className="state-box">
-            <div className="spinner" />
-            <p>Loading records...</p>
+          <div className="filters">
+            <div className="search-wrap">
+              <Search className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search by phone number..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="filter-row">
+              <select
+                className="filter-select"
+                value={languageFilter}
+                onChange={(e) => setLanguageFilter(e.target.value)}
+              >
+                <option value="">All languages</option>
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+                <option value="mixed">Mixed</option>
+              </select>
+              <input
+                type="date"
+                className="date-input"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                title="Start date"
+              />
+              <input
+                type="date"
+                className="date-input"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                title="End date"
+              />
+              {hasFilters && (
+                <button type="button" className="btn btn-ghost" onClick={clearFilters}>
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
-        ) : error ? (
-          <div className="state-box error">
-            <AlertCircle className="icon-xl" />
-            <p>{error}</p>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={loadData}
-              style={{ marginTop: '0.75rem' }}
-            >
-              Retry
-            </button>
+
+          <div className="panel">
+            {loading && records.length === 0 ? (
+              <div className="state-box">
+                <div className="spinner" />
+                <p>Loading records...</p>
+              </div>
+            ) : error ? (
+              <div className="state-box error">
+                <AlertCircle className="icon-xl" />
+                <p>{error}</p>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={loadData}
+                  style={{ marginTop: '0.75rem' }}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : records.length === 0 ? (
+              <div className="state-box">
+                <Phone className="icon-xl" />
+                <p>No phone numbers yet.</p>
+                <span className="hint">
+                  Use the Talk tab, confirm a number, then refresh here.
+                </span>
+              </div>
+            ) : (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Phone</th>
+                      <th>Language</th>
+                      <th>Collected at</th>
+                      <th>Transcript</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records.map((row) => {
+                      const open = expandedId === row.id;
+                      return (
+                        <React.Fragment key={row.id}>
+                          <tr>
+                            <td>
+                              <span className="phone">+91 {row.parsedNumber}</span>
+                            </td>
+                            <td>
+                              <span className={`badge badge-${row.language}`}>
+                                {row.language}
+                              </span>
+                            </td>
+                            <td className="time">{formatCollectedAt(row.collectedAt)}</td>
+                            <td>
+                              <div
+                                className="transcript-preview"
+                                onClick={() => toggleExpand(row.id)}
+                                title="Click to expand transcript"
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    toggleExpand(row.id);
+                                  }
+                                }}
+                              >
+                                {open ? (
+                                  <ChevronDown className="icon" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                                ) : (
+                                  <ChevronRight className="icon" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                                )}
+                                {row.rawTranscript}
+                              </div>
+                              {open && (
+                                <div className="transcript-expanded">
+                                  {row.rawTranscript}
+                                </div>
+                              )}
+                            </td>
+                            <td className="actions">
+                              <button
+                                type="button"
+                                className="btn btn-danger"
+                                onClick={() => handleDelete(row.id, row.parsedNumber)}
+                                title="Delete record"
+                              >
+                                <Trash2 className="icon" />
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        ) : records.length === 0 ? (
-          <div className="state-box">
-            <Phone className="icon-xl" />
-            <p>No phone numbers yet.</p>
-            <span className="hint">
-              Run the voice agent and confirm a number to see it here.
-            </span>
-          </div>
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Phone</th>
-                  <th>Language</th>
-                  <th>Collected at</th>
-                  <th>Transcript</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((row) => {
-                  const open = expandedId === row.id;
-                  return (
-                    <React.Fragment key={row.id}>
-                      <tr>
-                        <td>
-                          <span className="phone">+91 {row.parsedNumber}</span>
-                        </td>
-                        <td>
-                          <span className={`badge badge-${row.language}`}>
-                            {row.language}
-                          </span>
-                        </td>
-                        <td className="time">{formatCollectedAt(row.collectedAt)}</td>
-                        <td>
-                          <div
-                            className="transcript-preview"
-                            onClick={() => toggleExpand(row.id)}
-                            title="Click to expand transcript"
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                toggleExpand(row.id);
-                              }
-                            }}
-                          >
-                            {open ? (
-                              <ChevronDown className="icon" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-                            ) : (
-                              <ChevronRight className="icon" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-                            )}
-                            {row.rawTranscript}
-                          </div>
-                          {open && (
-                            <div className="transcript-expanded">
-                              {row.rawTranscript}
-                            </div>
-                          )}
-                        </td>
-                        <td className="actions">
-                          <button
-                            type="button"
-                            className="btn btn-danger"
-                            onClick={() => handleDelete(row.id, row.parsedNumber)}
-                            title="Delete record"
-                          >
-                            <Trash2 className="icon" />
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

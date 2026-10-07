@@ -10,7 +10,16 @@ from typing import Optional, Tuple, Any
 
 from livekit import rtc
 from livekit.rtc import AudioProcessingModule, AudioFrame
-from livekit.plugins import silero
+
+# Import STT/TTS plugins at module load (main thread). Lazy imports inside
+# get_stt()/get_tts() fail in LiveKit job workers with:
+# "Plugins must be registered on the main thread"
+from livekit.plugins import silero, deepgram, elevenlabs
+
+try:
+    from livekit.plugins import openai as openai_plugin
+except ImportError:  # optional fallback provider
+    openai_plugin = None
 
 logger = logging.getLogger("vaiu.agent.audio")
 
@@ -186,10 +195,13 @@ def get_stt() -> Any:
                 "DEEPGRAM_API_KEY environment variable is required for live Deepgram STT. "
                 "Please configure DEEPGRAM_API_KEY in your .env file, or run 'python -m agent.main test' for offline dialog testing."
             )
-        from livekit.plugins import deepgram
         model = os.getenv("DEEPGRAM_MODEL", "nova-3")
         language = os.getenv("DEEPGRAM_LANGUAGE", "multi")
-        logger.info(f"Initializing Deepgram STT (model={model}, language={language} for simultaneous Hindi+English)...")
+        logger.info(
+            "Initializing Deepgram STT (model=%s, language=%s)",
+            model,
+            language,
+        )
         return deepgram.STT(
             model=model,
             language=language,
@@ -197,20 +209,24 @@ def get_stt() -> Any:
             interim_results=True,
             punctuate=True,
             numerals=True,
-            api_key=api_key
+            api_key=api_key,
         )
     elif provider == "openai":
+        if openai_plugin is None:
+            raise RuntimeError(
+                "livekit-plugins-openai is not installed. "
+                "Run: pip install livekit-plugins-openai"
+            )
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError(
                 "OPENAI_API_KEY environment variable is required for OpenAI Whisper STT. "
                 "Please configure OPENAI_API_KEY in your .env file."
             )
-        from livekit.plugins import openai
         logger.info("Initializing OpenAI Whisper STT...")
-        return openai.STT(
+        return openai_plugin.STT(
             model="whisper-1",
-            api_key=api_key
+            api_key=api_key,
         )
     else:
         raise ValueError(f"Unsupported STT_PROVIDER: {provider}. Supported: 'deepgram', 'openai'")
@@ -231,25 +247,28 @@ def get_tts() -> Any:
                 "ELEVENLABS_API_KEY environment variable is required for live ElevenLabs TTS. "
                 "Please configure ELEVENLABS_API_KEY in your .env file, or run 'python -m agent.main test' for offline dialog testing."
             )
-        from livekit.plugins import elevenlabs
-        logger.info("Initializing ElevenLabs TTS (eleven_multilingual_v2 model)...")
+        logger.info("Initializing ElevenLabs TTS (eleven_multilingual_v2)...")
         return elevenlabs.TTS(
             model="eleven_multilingual_v2",
-            api_key=api_key
+            api_key=api_key,
         )
     elif provider == "openai":
+        if openai_plugin is None:
+            raise RuntimeError(
+                "livekit-plugins-openai is not installed. "
+                "Run: pip install livekit-plugins-openai"
+            )
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError(
                 "OPENAI_API_KEY environment variable is required for OpenAI TTS. "
                 "Please configure OPENAI_API_KEY in your .env file."
             )
-        from livekit.plugins import openai
-        logger.info("Initializing OpenAI TTS fallback...")
-        return openai.TTS(
+        logger.info("Initializing OpenAI TTS...")
+        return openai_plugin.TTS(
             model="tts-1",
             voice="alloy",
-            api_key=api_key
+            api_key=api_key,
         )
     else:
         raise ValueError(f"Unsupported TTS_PROVIDER: {provider}. Supported: 'elevenlabs', 'openai'")

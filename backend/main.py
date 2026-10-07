@@ -3,14 +3,18 @@
 import os
 import logging
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
+load_dotenv()
+
 from backend.database import engine, Base
 from backend.routes.phones import router as phones_router
+from backend.routes.livekit_token import router as livekit_router
 
 # Configure logging
 logging.basicConfig(
@@ -78,6 +82,7 @@ def health_check():
 
 # Include routes
 app.include_router(phones_router)
+app.include_router(livekit_router)
 
 
 if __name__ == "__main__":
